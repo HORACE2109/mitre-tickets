@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Sistema de Entradas - Bartolomé Mitre</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- HEADER RESPONSIVE -->
+  <header>
+    <div class="brand">
+      <div class="brand-info">
+        <img src="/logo_mitre.png" alt="Mitre" style="height: 40px; width: auto; object-fit: contain;">
+        <div class="brand-text">
+          <h1>BARTOLOMÉ MITRE</h1>
+          <p>LIGA ARGENTINA &bull; ENTRADAS & QR</p>
+        </div>
+      </div>
+      <a href="/scanner" target="_blank" class="btn-door-shortcut" title="Abrir vista exclusiva del guardia">
+        <span>📱</span> <span>Puerta</span>
+      </a>
+    </div>
+
+    <!-- TABS NAVIGATION SEGMENTADA -->
+    <div class="header-actions">
+      <nav class="nav-tabs">
+        <button class="tab-btn active" data-tab="tab-generator">
+          <span>🎟️</span> Generar
+        </button>
+        <button class="tab-btn" data-tab="tab-scanner">
+          <span>📷</span> Escáner
+        </button>
+        <button class="tab-btn" data-tab="tab-dashboard">
+          <span>📋</span> Entradas
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- CONTENEDOR PRINCIPAL -->
+  <main>
+
+    <!-- ==================== TAB 1: GENERADOR ==================== -->
+    <section id="tab-generator" class="tab-content active">
+      <div class="grid-2">
+        <!-- FORMULARIO DE GENERACIÓN -->
+        <div class="card">
+          <div class="card-title">
+            <span>⚙️</span> Configuración de Entrada o Pase
+          </div>
+
+          <div class="form-group">
+            <label>Tipo de Pase:</label>
+            <div class="radio-group">
+              <label class="radio-card selected" id="opt-invitacion">
+                <input type="radio" name="ticketType" value="invitacion" checked>
+                <div>✨ Invitación</div>
+                <small style="color: #94a3b8; font-size: 0.7rem;">Sponsors / VIP</small>
+              </label>
+              <label class="radio-card" id="opt-abono">
+                <input type="radio" name="ticketType" value="abono">
+                <div>🏀 Abono</div>
+                <small style="color: #94a3b8; font-size: 0.7rem;">Pack Fechas</small>
+              </label>
+              <label class="radio-card" id="opt-general">
+                <input type="radio" name="ticketType" value="general">
+                <div>🎫 General</div>
+                <small style="color: #94a3b8; font-size: 0.7rem;">1 Partido</small>
+              </label>
+            </div>
+          </div>
+
+          <!-- CAMPO CANTIDAD DE PARTIDOS (PARA ABONO) -->
+          <div class="form-group" id="groupMatchCount" style="display: none;">
+            <label for="inputMatchCount">🏀 Partidos Incluidos en el Abono:</label>
+            <div style="display: flex; gap: 0.4rem; align-items: center;">
+              <input type="number" id="inputMatchCount" value="10" min="2" max="50" style="flex: 1;">
+              <button type="button" class="btn btn-secondary" onclick="document.getElementById('inputMatchCount').value=3; drawPreview();" style="padding: 0.4rem 0.6rem; font-size: 0.75rem;">3</button>
+              <button type="button" class="btn btn-secondary" onclick="document.getElementById('inputMatchCount').value=5; drawPreview();" style="padding: 0.4rem 0.6rem; font-size: 0.75rem;">5</button>
+              <button type="button" class="btn btn-secondary" onclick="document.getElementById('inputMatchCount').value=10; drawPreview();" style="padding: 0.4rem 0.6rem; font-size: 0.75rem;">10</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="inputBeneficiary" id="labelBeneficiary">Destinatario / Sponsor / Referencia:</label>
+            <input type="text" id="inputBeneficiary" placeholder="Ej: Sponsor Banco Macro, Prensa...">
+          </div>
+
+          <div class="form-group" id="groupCount">
+            <label for="inputCount">Cantidad de Entradas a Generar:</label>
+            <input type="number" id="inputCount" value="4" min="1" max="100">
+            <small style="color: var(--text-muted); font-size: 0.75rem; display: block; margin-top: 2px;">
+              💡 Cada entrada tendrá un código QR único e irrepetible.
+            </small>
+          </div>
+
+          <div class="form-group" id="groupMatchSelect">
+            <label for="selectMatch">Asignar a Partido:</label>
+            <select id="selectMatch"></select>
+          </div>
+
+          <!-- CAMBIAR PLANTILLA -->
+          <div class="form-group">
+            <label>Plantilla de Fondo:</label>
+            <div style="display: flex; gap: 0.4rem;">
+              <input type="file" id="fileTemplate" accept="image/*" style="display: none;">
+              <button class="btn btn-secondary btn-block" onclick="document.getElementById('fileTemplate').click()" style="font-size: 0.8rem;">
+                📁 Cambiar Fondo
+              </button>
+              <button class="btn btn-secondary" id="btnRestoreDefault" style="font-size: 0.8rem;" title="Restaurar diseño oficial">
+                ↺ Original
+              </button>
+            </div>
+            <small id="templateInfo" style="color: var(--accent-gold); font-size: 0.7rem; margin-top: 2px; display: block;">
+              Usando plantilla actual
+            </small>
+          </div>
+
+          <!-- AJUSTE FINO DEL RECUADRO QR -->
+          <details style="border: 1px solid var(--border-color); border-radius: 8px; padding: 0.5rem;">
+            <summary style="cursor: pointer; color: var(--accent-gold); font-size: 0.8rem; font-weight: 700;">
+              🛠️ Calibrar Posición del QR (Opcional)
+            </summary>
+            <div class="qr-controls-box">
+              <div class="form-group">
+                <label>Posición X: <span id="valX">432</span> px</label>
+                <input type="range" id="sliderX" min="0" max="1080" value="432">
+              </div>
+              <div class="form-group">
+                <label>Posición Y: <span id="valY">1056</span> px</label>
+                <input type="range" id="sliderY" min="0" max="1440" value="1056">
+              </div>
+              <div class="form-group">
+                <label>Tamaño QR: <span id="valSize">215</span> px</label>
+                <input type="range" id="sliderSize" min="50" max="400" value="215">
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; color: #fff; font-size: 0.75rem;">
+                  <input type="checkbox" id="chkTransparent" checked style="width: auto;">
+                  <span>Fondo Transparente (se adapta al recuadro del diseño)</span>
+                </label>
+              </div>
+            </div>
+          </details>
+
+          <button class="btn btn-primary btn-block" id="btnGenerate" style="margin-top: 1rem; font-size: 1rem; padding: 0.85rem;">
+            ⚡ Generar Entradas y Estampar QR
+          </button>
+        </div>
+
+        <!-- PREVISUALIZADOR EN VIVO (CANVAS) -->
+        <div class="card">
+          <div class="card-title" style="justify-content: space-between;">
+            <span>👁️ Muestra en Vivo</span>
+          </div>
+          <div class="canvas-container">
+            <canvas id="previewCanvas" width="768" height="1024"></canvas>
+          </div>
+          <button class="btn btn-secondary btn-block" id="btnDownloadPreview" style="margin-top: 0.75rem; font-size: 0.85rem;">
+            ⬇️ Descargar Esta Muestra (PNG)
+          </button>
+        </div>
+      </div>
+
+      <!-- SECCIÓN DE LOTE GENERADO CON ACCIONES MASIVAS -->
+      <div id="recentBatchSection" style="margin-top: 1.5rem; display: none;">
+        <!-- BANNER MAESTRO PARA ENVIAR O DESCARGAR TODO EL LOTE -->
+        <div class="batch-master-card" id="batchMasterCard">
+          <h3 style="color: #fff; font-size: 1.05rem; margin: 0;">
+            📦 Lote: <span id="masterBatchTitle" style="color: var(--accent-gold);"></span>
+          </h3>
+          <span id="masterBatchCount" style="color: var(--text-muted); font-size: 0.8rem;"></span>
+
+          <div class="batch-master-actions">
+            <button class="btn btn-success" id="btnShareBatchWhatsApp" style="padding: 0.75rem; font-size: 0.9rem;">
+              📲 Enviar Lote Completo por WhatsApp (Todas las fotos)
+            </button>
+            <button class="btn btn-primary" id="btnDownloadBatchZip" style="padding: 0.75rem; font-size: 0.9rem;">
+              📦 Descargar Lote Completo (.ZIP)
+            </button>
+          </div>
+        </div>
+
+        <p style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 0.5rem;">
+          También podés enviar o descargar cada entrada individualmente:
+        </p>
+        <div class="tickets-grid" id="batchTicketsList">
+          <!-- Tarjetas dinámicas -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 2: ESCÁNER ADMIN ==================== -->
+    <section id="tab-scanner" class="tab-content">
+      <div style="max-width: 500px; margin: 0 auto;">
+        
+        <!-- BANNER ENLACE ONLINE -->
+        <div style="background: rgba(37, 99, 235, 0.15); border: 1px solid var(--accent-gold); border-radius: 10px; padding: 0.75rem; margin-bottom: 1rem;">
+          <div style="font-size: 0.8rem; color: var(--accent-gold); font-weight: 700;">🌐 Enlace Directo para el Portero:</div>
+          <div style="margin-top: 3px; display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;">
+            <a id="onlineTunnelLink" href="https://brook-chubby-colors-masters.trycloudflare.com/scanner" target="_blank" style="color: #60a5fa; font-weight: 700; font-size: 0.8rem; word-break: break-all; text-decoration: underline;">
+              https://brook-chubby-colors-masters.trycloudflare.com/scanner
+            </a>
+            <button class="btn btn-secondary" onclick="navigator.clipboard.writeText(document.getElementById('onlineTunnelLink').href); showToast('¡Enlace de puerta copiado!');" style="padding: 0.3rem 0.6rem; font-size: 0.75rem; white-space: nowrap;">
+              📋 Copiar
+            </button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title" style="justify-content: space-between;">
+            <span>📷 Escáner de Prueba</span>
+            <span class="ticket-badge badge-general" id="scannerStatusBadge">Listo</span>
+          </div>
+
+          <div class="form-group">
+            <label for="scannerMatchSelect">🎯 Partido:</label>
+            <select id="scannerMatchSelect"></select>
+          </div>
+
+          <div id="reader" style="width: 100%; border-radius: 10px; overflow: hidden; background: #000;"></div>
+
+          <div style="display: flex; gap: 0.4rem; margin-top: 0.75rem;">
+            <button class="btn btn-primary" id="btnToggleCamera" style="flex: 2; font-size: 0.9rem;">
+              📷 Iniciar Cámara
+            </button>
+            <input type="file" id="inputScanFile" accept="image/*" capture="environment" style="display: none;">
+            <button class="btn btn-secondary" onclick="document.getElementById('inputScanFile').click()" style="flex: 1; font-size: 0.9rem;">
+              📸 Foto QR
+            </button>
+          </div>
+
+          <div style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 0.75rem;">
+            <label for="inputManualCode" style="font-size: 0.75rem;">Código manual:</label>
+            <div style="display: flex; gap: 0.4rem;">
+              <input type="text" id="inputManualCode" placeholder="Ej: MITRE-INV-XXXXX">
+              <button class="btn btn-secondary" id="btnValidateManual" style="padding: 0.5rem 0.85rem;">OK</button>
+            </div>
+          </div>
+
+          <div id="scanResultCard" class="scan-result-card">
+            <div id="scanIcon" class="scan-icon">✅</div>
+            <div id="scanTitle" class="scan-title">¡ACCESO PERMITIDO!</div>
+            <div id="scanDesc" class="scan-desc">Detalle</div>
+            <div id="scanAbonoProgress" class="progress-abono" style="display: none;"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 3: ASISTENCIA Y REGISTRO DE ENTRADAS ==================== -->
+    <section id="tab-dashboard" class="tab-content">
+      <!-- STATS BOXES -->
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="stat-number" id="statTotalTickets">0</div>
+          <div class="stat-label">Total Emitidos</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-number" id="statScannedToday" style="color: var(--success-green);">0</div>
+          <div class="stat-label">Ingresaron</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-number" id="statPendingTickets" style="color: #60a5fa;">0</div>
+          <div class="stat-label">Pendientes</div>
+        </div>
+      </div>
+
+      <!-- LISTADO DE ENTRADAS OPTIMIZADO PARA MÓVIL Y DESKTOP -->
+      <div class="card">
+        <div class="card-title" style="justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;">
+          <span>📋 Registro de Entradas Emitidas</span>
+          <div style="display: flex; gap: 0.4rem;">
+            <button class="btn btn-secondary" id="btnRefreshTickets" style="padding: 0.4rem 0.7rem; font-size: 0.8rem;">🔄 Actualizar</button>
+            <button class="btn btn-danger" id="btnResetAll" style="padding: 0.4rem 0.7rem; font-size: 0.8rem;" title="Reinicia todas a activas">↺ Reset All</button>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 0.75rem;">
+          <input type="text" id="searchTickets" placeholder="🔍 Buscar por nombre, sponsor o código..." style="padding: 0.6rem 0.85rem; font-size: 0.9rem;">
+        </div>
+
+        <div class="tickets-list-container" id="ticketsListContainer">
+          <!-- Cards dinámicas para cada entrada -->
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- MODAL PARA VER Y ENVIAR CUALQUIER ENTRADA DESDE LA BASE DE DATOS -->
+  <div id="ticketModal" class="modal-backdrop" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <strong style="color: #fff; font-size: 0.95rem;" id="modalTicketTitle">Detalle de Entrada</strong>
+        <button onclick="closeTicketModal()" style="background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer;">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="modalLoading" style="padding: 2rem; color: var(--text-muted);">Cargando entrada...</div>
+        <img id="modalTicketImg" src="" style="width: 100%; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); display: none;" alt="Entrada">
+        <div id="modalActions" style="margin-top: 1rem; display: flex; flex-direction: column; gap: 0.5rem; display: none;">
+          <button class="btn btn-success btn-block" id="modalBtnShareWhatsApp" style="font-weight: 700;">
+            📲 Enviar Foto por WhatsApp
+          </button>
+          <div style="display: flex; gap: 0.4rem;">
+            <a id="modalBtnDownload" download="Entrada-Mitre.png" href="#" class="btn btn-primary btn-block" style="font-size: 0.85rem;">
+              ⬇️ Descargar PNG
+            </a>
+            <a id="modalBtnLink" target="_blank" href="#" class="btn btn-secondary" style="font-size: 0.85rem;" title="Abrir pase web">
+              🔗
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LIBRERÍAS JS -->
+  <script src="js/jszip.min.js"></script>
+  <script src="js/html5-qrcode.min.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

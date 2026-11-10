@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Control de Acceso en Puerta - Bartolomé Mitre</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    body {
+      background: #070b14;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+    }
+    .scanner-header {
+      background: #0f172a;
+      padding: 0.75rem 1rem;
+      border-bottom: 2px solid var(--accent-gold);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .scanner-body {
+      flex: 1;
+      max-width: 480px;
+      margin: 0 auto;
+      width: 100%;
+      padding: 0.85rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+    }
+    .camera-container {
+      position: relative;
+      width: 100%;
+      border-radius: 16px;
+      overflow: hidden;
+      border: 3px solid var(--border-color);
+      background: #000;
+      min-height: 280px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.6);
+      transition: border-color 0.2s;
+    }
+    #reader {
+      width: 100%;
+    }
+    /* HEADS-UP OVERLAY SOBRE LA CÁMARA (SIN SCROLL!) */
+    .camera-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      text-align: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), transform 0.2s ease;
+      transform: scale(0.92);
+      z-index: 60;
+    }
+    .camera-overlay.visible {
+      opacity: 1;
+      transform: scale(1);
+    }
+    .camera-overlay.success {
+      background: rgba(6, 78, 59, 0.95);
+      border: 4px solid #10b981;
+      color: #fff;
+    }
+    .camera-overlay.danger {
+      background: rgba(127, 29, 29, 0.96);
+      border: 4px solid #ef4444;
+      color: #fff;
+    }
+    .overlay-icon {
+      font-size: 4rem;
+      margin-bottom: 0.25rem;
+      animation: bounce 0.4s ease;
+    }
+    .overlay-title {
+      font-size: 1.6rem;
+      font-weight: 900;
+      letter-spacing: 0.5px;
+      margin-bottom: 0.35rem;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.7);
+    }
+    .overlay-detail {
+      font-size: 1.15rem;
+      font-weight: 700;
+      text-shadow: 0 2px 6px rgba(0,0,0,0.7);
+    }
+    .overlay-sub {
+      font-size: 0.85rem;
+      margin-top: 0.5rem;
+      background: rgba(0,0,0,0.3);
+      padding: 0.4rem 0.8rem;
+      border-radius: 20px;
+    }
+    @keyframes bounce {
+      0% { transform: scale(0.6); }
+      70% { transform: scale(1.15); }
+      100% { transform: scale(1); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER EXCLUSIVO PUERTA -->
+  <header class="scanner-header">
+    <div style="display: flex; align-items: center; gap: 0.75rem;">
+      <img src="/logo_mitre.png" alt="Mitre" style="height: 38px; width: auto; object-fit: contain;">
+      <div>
+        <h2 style="font-size: 0.95rem; color: #fff; margin: 0; font-weight: 800; letter-spacing: 0.5px;">CONTROL DE PUERTA</h2>
+        <span style="font-size: 0.75rem; color: var(--accent-gold); font-weight: 700;">MITRE BASKETBALL</span>
+      </div>
+    </div>
+    <div style="text-align: right; background: rgba(0,0,0,0.3); padding: 0.35rem 0.75rem; border-radius: 8px; border: 1px solid var(--border-color);">
+      <span style="font-size: 0.65rem; color: var(--text-muted); display: block; font-weight: 700;">INGRESOS</span>
+      <span id="doorCounter" style="font-size: 1.3rem; font-weight: 900; color: var(--success-green); line-height: 1;">0</span>
+    </div>
+  </header>
+
+  <!-- CONTENIDO PRINCIPAL -->
+  <main class="scanner-body">
+    
+    <!-- SELECTOR DE PARTIDO -->
+    <div style="background: #101827; border: 1px solid var(--border-color); padding: 0.65rem 0.85rem; border-radius: 10px;">
+      <label for="guardMatchSelect" style="font-size: 0.75rem; color: var(--accent-gold); font-weight: 700; margin-bottom: 0.25rem; display: block;">
+        🎯 Partido a Controlar Hoy:
+      </label>
+      <select id="guardMatchSelect" style="padding: 0.5rem; font-size: 0.85rem; font-weight: 600; background: #162035;"></select>
+    </div>
+
+    <!-- CONTENEDOR DE CÁMARA CON OVERLAY INCORPORADO -->
+    <div class="camera-container" id="cameraBox">
+      <div id="reader"></div>
+
+      <!-- OVERLAY GIGANTE DIRECTO SOBRE EL VISOR DE LA CÁMARA -->
+      <div id="cameraOverlay" class="camera-overlay">
+        <div id="overlayIcon" class="overlay-icon">✅</div>
+        <div id="overlayTitle" class="overlay-title">¡ACCESO PERMITIDO!</div>
+        <div id="overlayDetail" class="overlay-detail">Sponsor Banco Macro</div>
+        <div id="overlaySub" class="overlay-sub">Invitación Especial (1/1)</div>
+      </div>
+    </div>
+
+    <!-- BOTONES DE CONTROL DE CÁMARA -->
+    <div style="display: flex; gap: 0.5rem;">
+      <button class="btn btn-primary" id="btnToggleCam" style="flex: 2; padding: 0.85rem; font-size: 0.95rem;">
+        📷 Iniciar Cámara
+      </button>
+      <input type="file" id="guardFileInput" accept="image/*" capture="environment" style="display: none;">
+      <button class="btn btn-secondary" onclick="document.getElementById('guardFileInput').click()" style="flex: 1;" title="Foto QR">
+        📸 Foto
+      </button>
+      <button class="btn btn-secondary" id="btnTorch" style="padding: 0.85rem;" title="Encender Linterna">
+        🔦
+      </button>
+    </div>
+
+    <!-- ENTRADA MANUAL O PISTOLA -->
+    <div style="background: #101827; border: 1px solid var(--border-color); border-radius: 10px; padding: 0.65rem 0.85rem;">
+      <label style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">Ingreso por código manual o pistola:</label>
+      <div style="display: flex; gap: 0.4rem; margin-top: 0.3rem;">
+        <input type="text" id="inputManualGuard" placeholder="Ej: MITRE-INV-XXXX" style="padding: 0.5rem; font-size: 0.9rem;">
+        <button class="btn btn-secondary" id="btnValidateManualGuard" style="padding: 0.5rem 0.9rem; font-weight: 700;">OK</button>
+      </div>
+    </div>
+
+    <!-- REGISTRO RECIENTE -->
+    <div style="background: #0d1424; border: 1px solid var(--border-color); border-radius: 10px; padding: 0.65rem 0.85rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+        <strong style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Últimos 5 escaneados:</strong>
+        <span style="font-size: 0.7rem; color: var(--accent-gold); font-weight: 600;">En vivo</span>
+      </div>
+      <div id="guardRecentScans" style="max-height: 140px; overflow-y: auto; font-size: 0.85rem;">
+        <div style="color: var(--text-muted); text-align: center; padding: 0.5rem; font-size: 0.8rem;">Esperando escaneos...</div>
+      </div>
+    </div>
+
+  </main>
+
+  <script src="/js/html5-qrcode.min.js"></script>
+  <script>
+    // Audio Context Beeps
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playBeep(type) {
+      try {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        if (type === 'success') {
+          osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+          osc.frequency.setValueAtTime(1174.66, audioCtx.currentTime + 0.08);
+          gain.gain.setValueAtTime(0.35, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.35);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.35);
+        } else {
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(160, audioCtx.currentTime);
+          gain.gain.setValueAtTime(0.45, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.5);
+        }
+      } catch (e) {}
+    }
+
+    function doVibrate(type) {
+      try {
+        if (navigator.vibrate) {
+          if (type === 'success') {
+            navigator.vibrate([220]); // 1 solid buzz
+          } else {
+            navigator.vibrate([150, 70, 150, 70, 250]); // Warning buzzes
+          }
+        }
+      } catch (e) {}
+    }
+
+    let html5QrCode = null;
+    let isCamRunning = false;
+    let isProcessing = false;
+    let lastCode = '';
+    let lastCodeTime = 0;
+    let doorCount = 0;
+    let isTorchOn = false;
+
+    async function init() {
+      const res = await fetch('/api/config');
+      const cfg = await res.json();
+      const sel = document.getElementById('guardMatchSelect');
+      sel.innerHTML = '';
+      cfg.matches.forEach(m => {
+        sel.add(new Option(`${m.name} (${m.date})`, m.id));
+      });
+      sel.value = cfg.activeMatchId;
+      doorCount = cfg.stats.usedToday || 0;
+      document.getElementById('doorCounter').textContent = doorCount;
+    }
+
+    async function toggleCamera() {
+      const btn = document.getElementById('btnToggleCam');
+      if (isCamRunning) {
+        if (html5QrCode) await html5QrCode.stop();
+        html5QrCode = null;
+        isCamRunning = false;
+        btn.textContent = '📷 Iniciar Cámara';
+        btn.className = 'btn btn-primary';
+        return;
+      }
+      try {
+        html5QrCode = new Html5Qrcode("reader");
+        btn.textContent = '⏹️ Detener Cámara';
+        btn.className = 'btn btn-danger';
+        await html5QrCode.start(
+          { facingMode: "environment" },
+          {
+            fps: 20,
+            qrbox: (w, h) => {
+              const min = Math.min(w, h);
+              const sz = Math.max(220, Math.floor(min * 0.72));
+              return { width: sz, height: sz };
+            },
+            experimentalFeatures: {
+              useBarCodeDetectorIfSupported: true
+            }
+          },
+          onScan
+        );
+        isCamRunning = true;
+      } catch (err) {
+        alert("Error de cámara: " + err);
+        btn.textContent = '📷 Iniciar Cámara';
+        btn.className = 'btn btn-primary';
+        isCamRunning = false;
+      }
+    }
+
+    // ON SCAN WITH COOLDOWN & DUPLICATE BLOCK
+    async function onScan(decoded) {
+      const now = Date.now();
+      // Block duplicate scan of same code within 5 seconds!
+      if (decoded === lastCode && (now - lastCodeTime) < 5000) {
+        return;
+      }
+      // If currently showing a result overlay, don't trigger again!
+      if (isProcessing) return;
+
+      isProcessing = true;
+      lastCode = decoded;
+      lastCodeTime = now;
+
+      await validate(decoded);
+
+      // Hide overlay and allow next scan after 2.8 seconds
+      setTimeout(() => {
+        hideOverlay();
+        isProcessing = false;
+      }, 2800);
+    }
+
+    async function validate(code) {
+      const matchId = document.getElementById('guardMatchSelect').value;
+      try {
+        const res = await fetch('/api/tickets/validate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code, matchId, gate: 'Control Móvil' })
+        });
+        const data = await res.json();
+        showOverlayResult(data);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function showOverlayResult(res) {
+      const overlay = document.getElementById('cameraOverlay');
+      const box = document.getElementById('cameraBox');
+      const icon = document.getElementById('overlayIcon');
+      const title = document.getElementById('overlayTitle');
+      const detail = document.getElementById('overlayDetail');
+      const sub = document.getElementById('overlaySub');
+
+      overlay.className = 'camera-overlay';
+
+      if (res.valid) {
+        // GREEN SUCCESS
+        playBeep('success');
+        doVibrate('success');
+        overlay.classList.add('visible', 'success');
+        box.style.borderColor = '#10b981';
+
+        icon.textContent = '✅';
+        title.textContent = res.message;
+        detail.textContent = res.detail;
+
+        if (res.status === 'GRANTED_ABONO') {
+          sub.textContent = `🏀 ${res.progressText}`;
+        } else {
+          sub.textContent = `${res.typeLabel || 'Entrada Habilitada'}`;
+        }
+
+        doorCount++;
+        document.getElementById('doorCounter').textContent = doorCount;
+      } else {
+        // RED ERROR
+        playBeep('error');
+        doVibrate('error');
+        overlay.classList.add('visible', 'danger');
+        box.style.borderColor = '#ef4444';
+
+        icon.textContent = '🛑';
+        title.textContent = res.message;
+        detail.textContent = res.detail;
+        sub.textContent = 'NO PERMITIR INGRESO';
+      }
+
+      addLog(res);
+      document.getElementById('inputManualGuard').value = '';
+    }
+
+    function hideOverlay() {
+      const overlay = document.getElementById('cameraOverlay');
+      const box = document.getElementById('cameraBox');
+      overlay.classList.remove('visible');
+      box.style.borderColor = 'var(--border-color)';
+    }
+
+    function addLog(res) {
+      const container = document.getElementById('guardRecentScans');
+      if (container.querySelector('div')?.textContent.includes('Esperando')) {
+        container.innerHTML = '';
+      }
+      const item = document.createElement('div');
+      item.style.padding = '0.35rem 0';
+      item.style.borderBottom = '1px solid rgba(255,255,255,0.06)';
+      item.style.display = 'flex';
+      item.style.justifyContent = 'space-between';
+      item.style.alignItems = 'center';
+
+      const time = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      item.innerHTML = `
+        <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 75%;">
+          ${res.valid ? '🟢' : '🔴'} <strong>${res.detail || res.message}</strong>
+        </span>
+        <span style="color: var(--text-muted); font-size: 0.75rem; font-family: monospace;">${time}</span>
+      `;
+      container.prepend(item);
+      // Keep max 5
+      while (container.children.length > 5) {
+        container.removeChild(container.lastChild);
+      }
+    }
+
+    // File scan fallback
+    document.getElementById('guardFileInput').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        const scanner = html5QrCode || new Html5Qrcode("reader");
+        const text = await scanner.scanFile(file, true);
+        await validate(text);
+        setTimeout(() => hideOverlay(), 3000);
+      } catch (err) {
+        alert("No se leyó el código QR de la foto.");
+      } finally {
+        e.target.value = '';
+      }
+    });
+
+    // Torch control
+    document.getElementById('btnTorch').addEventListener('click', async () => {
+      if (!html5QrCode || !isCamRunning) return;
+      try {
+        isTorchOn = !isTorchOn;
+        await html5QrCode.applyVideoConstraints({
+          advanced: [{ torch: isTorchOn }]
+        });
+        document.getElementById('btnTorch').style.background = isTorchOn ? 'var(--accent-gold)' : '';
+      } catch (e) {
+        alert("Linterna no disponible en este dispositivo.");
+      }
+    });
+
+    document.getElementById('btnToggleCam').addEventListener('click', toggleCamera);
+    document.getElementById('btnValidateManualGuard').addEventListener('click', () => {
+      const v = document.getElementById('inputManualGuard').value.trim();
+      if (v) {
+        validate(v);
+        setTimeout(() => hideOverlay(), 3000);
+      }
+    });
+    document.getElementById('inputManualGuard').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        const v = document.getElementById('inputManualGuard').value.trim();
+        if (v) {
+          validate(v);
+          setTimeout(() => hideOverlay(), 3000);
+        }
+      }
+    });
+
+    init();
+  </script>
+</body>
+</html>

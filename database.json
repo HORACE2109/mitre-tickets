@@ -1,0 +1,157 @@
+{
+  "activeMatchId": "match-1",
+  "matches": [
+    {
+      "id": "match-1",
+      "name": "Bartolomé Mitre vs Sportivo Suardi",
+      "date": "Miércoles 11/11",
+      "time": "21:30 HS",
+      "stadium": "Estadio Bartolomé Mitre",
+      "tournament": "Liga Argentina"
+    },
+    {
+      "id": "match-2",
+      "name": "Bartolomé Mitre vs Deportivo Norte",
+      "date": "Domingo 15/11",
+      "time": "20:00 HS",
+      "stadium": "Estadio Bartolomé Mitre",
+      "tournament": "Liga Argentina"
+    }
+  ],
+  "tickets": [
+    {
+      "id": "INV-H3UFTV",
+      "type": "invitacion",
+      "beneficiary": "Invitado Especial (4/4)",
+      "matchId": "match-1",
+      "maxUses": 1,
+      "remainingUses": 0,
+      "status": "used",
+      "createdAt": "2026-11-10T05:10:53.756Z",
+      "notes": "",
+      "batchTotal": 4,
+      "batchIndex": 4,
+      "entries": [
+        {
+          "matchId": "match-1",
+          "matchName": "Bartolomé Mitre vs Sportivo Suardi",
+          "timestamp": "2026-11-10T05:12:50.122Z",
+          "gate": "Control Móvil"
+        }
+      ]
+    },
+    {
+      "id": "INV-EQLLXQ",
+      "type": "invitacion",
+      "beneficiary": "Invitado Especial (3/4)",
+      "matchId": "match-1",
+      "maxUses": 1,
+      "remainingUses": 0,
+      "status": "used",
+      "createdAt": "2026-11-10T05:10:53.756Z",
+      "notes": "",
+      "batchTotal": 4,
+      "batchIndex": 3,
+      "entries": [
+        {
+          "matchId": "match-1",
+          "matchName": "Bartolomé Mitre vs Sportivo Suardi",
+          "timestamp": "2026-11-10T05:14:01.416Z",
+          "gate": "Control Móvil"
+        }
+      ]
+    },
+    {
+      "id": "INV-3Y8VGY",
+      "type": "invitacion",
+      "beneficiary": "Invitado Especial (2/4)",
+      "matchId": "match-1",
+      "maxUses": 1,
+      "remainingUses": 1,
+      "status": "active",
+      "createdAt": "2026-11-10T05:10:53.756Z",
+      "notes": "",
+      "batchTotal": 4,
+      "batchIndex": 2,
+      "entries": []
+    },
+    {
+      "id": "INV-YQEPV5",
+      "type": "invitacion",
+      "beneficiary": "Invitado Especial (1/4)",
+      "matchId": "match-1",
+      "maxUses": 1,
+      "remainingUses": 1,
+      "status": "active",
+      "createdAt": "2026-11-10T05:10:53.756Z",
+      "notes": "",
+      "batchTotal": 4,
+      "batchIndex": 1,
+      "entries": []
+    },
+    {
+      "id": "INV-RRA5FN",
+      "type": "invitacion",
+      "beneficiary": "Invitado Especial (4/4)",
+      "matchId": "match-1",
+      "maxUses": 1,
+      "remainingUses": 1,
+      "status": "active",
+      "createdAt": "2026-11-10T04:59:45.620Z",
+      "notes": "",
+      "batchTotal": 4,
+      "batchIndex": 4,
+      "entries": []
+    },
+    {
+      "id": "INV-L62FPE",
+      "type": "invitacion",
+      "beneficiary": "Invitado Especial (3/4)",
+      "matchId": "match-1",
+      "maxUses": 1,
+      "remainingUses": 1,
+      "status": "active",
+      "createdAt": "2026-11-10T04:59:45.620Z",
+      "notes": "",
+      "batchTotal": 4,
+      "batchIndex": 3,
+      "entries": []
+    },
+    {
+      "id": "INV-66MUFE",
+      "type": "invitacion",
+      "beneficiary": "Invitado Especial (2/4)",
+      "matchId": "match-1",
+      "maxUses": 1,
+      "remainingUses": 1,
+      "status": "active",
+      "createdAt": "2026-11-10T04:59:45.620Z",
+      "notes": "",
+      "batchTotal": 4,
+      "batchIndex": 2,
+      "entries": []
+    },
+    {
+      "id": "INV-NYRFR3",
+      "type": "invitacion",
+      "beneficiary": "Invitado Especial (1/4)",
+      "matchId": "match-1",
+      "maxUses": 1,
+      "remainingUses": 0,
+      "status": "used",
+      "createdAt": "2026-11-10T04:59:45.620Z",
+      "notes": "",
+      "batchTotal": 4,
+      "batchIndex": 1,
+      "entries": [
+        {
+          "matchId": "match-1",
+          "matchName": "Bartolomé Mitre vs Sportivo Suardi",
+          "timestamp": "2026-11-10T05:00:37.569Z",
+          "gate": "Puerta Principal"
+        }
+      ]
+    }
+  ],
+  "currentTemplate": "template_custom_1794287441013.png"
+}

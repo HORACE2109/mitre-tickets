@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pase Digital - Club Bartolomé Mitre</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    body {
+      background: #070c18;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      min-height: 100vh;
+    }
+    .ticket-container {
+      max-width: 440px;
+      width: 100%;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 15px 35px rgba(0,0,0,0.6);
+      text-align: center;
+    }
+    .ticket-image-wrapper {
+      position: relative;
+      background: #000;
+    }
+    .ticket-image-wrapper img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    .ticket-meta {
+      padding: 1.5rem;
+    }
+    .status-pill {
+      display: inline-block;
+      padding: 0.4rem 1rem;
+      border-radius: 20px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 0.75rem;
+    }
+    .status-pill.active {
+      background: rgba(16, 185, 129, 0.2);
+      color: #10b981;
+      border: 1px solid #10b981;
+    }
+    .status-pill.used {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+      border: 1px solid #ef4444;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="ticket-container" id="ticketContainer">
+    <div style="padding: 1rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: center; gap: 0.75rem;">
+      <img src="/logo_mitre.png" alt="Mitre" style="height: 38px; width: auto; object-fit: contain;">
+      <h2 style="font-size: 1.1rem; color: #fff; margin: 0; font-weight: 800; letter-spacing: 0.5px;">BARTOLOMÉ MITRE</h2>
+    </div>
+
+    <div class="ticket-image-wrapper">
+      <img id="ticketImg" src="" alt="Entrada Digital">
+    </div>
+
+    <div class="ticket-meta">
+      <div id="statusBadge" class="status-pill active">PASE ACTIVO</div>
+      <h3 id="ticketTitle" style="color: #fff; font-size: 1.25rem; margin-bottom: 0.25rem;">Invitación Especial</h3>
+      <p id="ticketBeneficiary" style="color: var(--accent-gold); font-weight: 600; margin-bottom: 0.75rem;">Sponsor</p>
+      <p id="ticketCode" style="color: var(--text-muted); font-size: 0.85rem; font-family: monospace;">CÓDIGO: ----</p>
+
+      <div id="abonoDetails" style="margin-top: 1rem; padding: 0.75rem; background: var(--bg-secondary); border-radius: 8px; display: none;">
+        <div style="font-size: 0.85rem; color: var(--text-muted);">Crédito de Partidos:</div>
+        <div id="abonoUsesText" style="font-size: 1.1rem; font-weight: 700; color: #60a5fa; margin-top: 4px;">10 de 10 disponibles</div>
+      </div>
+
+      <!-- QR DESTACADO DE ALTA LEGIBILIDAD PARA EL PORTERO -->
+      <div style="margin: 1.5rem 0 0.5rem 0; padding: 1.25rem; background: #ffffff; border-radius: 14px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);">
+        <img id="directQrImg" src="" style="width: 210px; height: 210px; display: block; margin: 0 auto;" alt="QR de Acceso">
+        <span style="color: #0a0f1d; font-weight: 800; font-size: 0.85rem; display: block; margin-top: 8px; letter-spacing: 0.5px;">
+          📸 MOSTRAR ESTE CÓDIGO EN LA PUERTA
+        </span>
+      </div>
+
+      <a id="btnDownloadImg" download="mi-entrada-mitre.png" href="#" class="btn btn-primary btn-block" style="margin-top: 1.25rem;">
+        ⬇️ Guardar Entrada en mi Celular
+      </a>
+    </div>
+  </div>
+
+  <script src="/js/qrcode.min.js"></script>
+  <script>
+    const ticketId = window.location.pathname.split('/').pop();
+    
+    async function loadTicket() {
+      try {
+        const [resTicket, resCfg] = await Promise.all([
+          fetch(`/api/tickets/${ticketId}`),
+          fetch('/api/config')
+        ]);
+        const data = await resTicket.json();
+        const cfg = await resCfg.json();
+
+        if (data.error) {
+          document.body.innerHTML = `<h2 style="color: #ef4444; text-align: center;">Entrada no encontrada</h2>`;
+          return;
+        }
+
+        const t = data.ticket;
+        document.getElementById('ticketTitle').textContent = t.type === 'abono' ? `Abono ${t.maxUses} Partidos` : (t.type === 'invitacion' ? 'Invitación Especial' : 'Entrada General');
+        document.getElementById('ticketBeneficiary').textContent = t.beneficiary;
+        document.getElementById('ticketCode').textContent = `ID: ${t.id}`;
+
+        const statusEl = document.getElementById('statusBadge');
+        if (t.status === 'used' || t.status === 'exhausted' || t.remainingUses === 0) {
+          statusEl.className = 'status-pill used';
+          statusEl.textContent = 'YA UTILIZADA';
+        } else {
+          statusEl.className = 'status-pill active';
+          statusEl.textContent = 'PASE ACTIVO HABILITADO';
+        }
+
+        if (t.type === 'abono') {
+          document.getElementById('abonoDetails').style.display = 'block';
+          document.getElementById('abonoUsesText').textContent = `${t.remainingUses} de ${t.maxUses} partidos disponibles`;
+        }
+
+        // Direct high-contrast QR
+        const qrUrl = `${window.location.origin}/ticket/${t.id}`;
+        document.getElementById('directQrImg').src = `/api/qr-image?text=${encodeURIComponent(qrUrl)}&size=300&transparent=false`;
+
+        // Draw ticket on temporary canvas and show
+        const templateImg = new Image();
+        templateImg.crossOrigin = 'anonymous';
+        const currentTemplateName = cfg.currentTemplate || 'template_default.jpg';
+        templateImg.src = `/uploads/${currentTemplateName}?t=${Date.now()}`;
+
+        templateImg.onload = () => {
+          const canvas = document.createElement('canvas');
+          const w = templateImg.naturalWidth || 768;
+          const h = templateImg.naturalHeight || 1024;
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(templateImg, 0, 0);
+
+          let qrSize, qrX, qrY;
+          if (w >= 1000) {
+            qrSize = 215;
+            qrX = Math.round(w * 0.5 - qrSize / 2);
+            qrY = 1056;
+          } else {
+            qrSize = 150;
+            qrX = Math.round(w * 0.5 - qrSize / 2);
+            qrY = 765;
+          }
+
+          // Fetch transparent QR image from API
+          const qrImg = new Image();
+          qrImg.crossOrigin = 'anonymous';
+          qrImg.src = `/api/qr-image?text=${encodeURIComponent(qrUrl)}&size=${qrSize * 2}&transparent=true`;
+          
+          qrImg.onload = () => {
+            ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
+            const dataUrl = canvas.toDataURL('image/png');
+            document.getElementById('ticketImg').src = dataUrl;
+            document.getElementById('btnDownloadImg').href = dataUrl;
+          };
+        };
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    loadTicket();
+  </script>
+</body>
+</html>
