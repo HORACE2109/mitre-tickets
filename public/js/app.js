@@ -450,6 +450,20 @@ async function renderBatchGallery(tickets, batchName) {
   masterSection.scrollIntoView({ behavior: 'smooth' });
 }
 
+// Helper: Convert base64 DataURL to Blob reliably across all browsers
+function dataUrlToBlob(dataUrl) {
+  const parts = dataUrl.split(',');
+  const mimeMatch = parts[0].match(/:(.*?);/);
+  const mime = mimeMatch ? mimeMatch[1] : 'image/png';
+  const bstr = atob(parts[1]);
+  let n = bstr.length;
+  const u8arr = new Uint8Array(n);
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n);
+  }
+  return new Blob([u8arr], { type: mime });
+}
+
 // ==================== BATCH ACTIONS (SEND ALL TOGETHER & ZIP) ====================
 async function shareBatchWhatsApp() {
   if (!currentBatchTickets || currentBatchTickets.length === 0) return;
@@ -457,24 +471,36 @@ async function shareBatchWhatsApp() {
   try {
     const files = [];
     for (const t of currentBatchTickets) {
-      const res = await fetch(t.renderedDataUrl);
-      const blob = await res.blob();
+      const blob = dataUrlToBlob(t.renderedDataUrl);
       files.push(new File([blob], `Entrada-Mitre-${t.id}.png`, { type: 'image/png' }));
     }
 
     if (navigator.canShare && navigator.canShare({ files })) {
-      await navigator.share({
-        files,
-        title: `Entradas Mitre (${files.length})`,
-        text: `🏀 *Club Bartolomé Mitre*\n🎟️ Adjuntamos las ${files.length} entradas solicitadas.`
-      });
-      return;
+      try {
+        await navigator.share({
+          files,
+          title: `Entradas Mitre (${files.length})`,
+          text: `🏀 *Club Bartolomé Mitre*\n🎟️ Adjuntamos las ${files.length} entradas solicitadas.`
+        });
+        showToast(`✅ ${files.length} entradas compartidas.`);
+        return;
+      } catch (shareErr) {
+        if (shareErr.name === 'AbortError') return;
+        try {
+          await navigator.share({ files });
+          showToast(`✅ ${files.length} entradas compartidas.`);
+          return;
+        } catch (e2) {
+          if (e2.name === 'AbortError') return;
+        }
+      }
     }
 
-    alert("En navegadores de escritorio no es posible enviar múltiples archivos juntos a la vez. Descargá el archivo .ZIP con el botón de al lado para compartir todas las fotos.");
+    alert("En navegadores de escritorio no es posible enviar múltiples fotos a la vez por WhatsApp. Descargá el archivo .ZIP con el botón de al lado para compartir todas las fotos.");
   } catch (err) {
     if (err.name !== 'AbortError') {
       console.error(err);
+      alert("Error al compartir: " + err.message);
     }
   }
 }
@@ -501,26 +527,42 @@ async function downloadBatchZip() {
 // ==================== WHATSAPP SINGLE SHARING ====================
 async function shareSingleTicketWhatsApp(ticketId, beneficiary, typeLabel, dataUrl) {
   try {
-    const res = await fetch(dataUrl);
-    const blob = await res.blob();
+    const blob = dataUrlToBlob(dataUrl);
     const file = new File([blob], `Entrada-Mitre-${ticketId}.png`, { type: 'image/png' });
-    const caption = `🏀 *Club Bartolomé Mitre - Liga Argentina*\n🎟️ *${typeLabel}*\n👤 Para: *${beneficiary}*`;
+    const ticketUrl = `${window.location.origin}/ticket/${ticketId}`;
+    const caption = `🏀 *Club Bartolomé Mitre - Liga Argentina*\n🎟️ *${typeLabel}*\n👤 Para: *${beneficiary}*\n👉 Pase Digital: ${ticketUrl}`;
 
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({
-        files,
-        title: `Entrada Mitre - ${beneficiary}`,
-        text: caption
-      });
-      return;
+    const files = [file];
+
+    // 1. Mobile Native Share (WhatsApp, Telegram, etc.)
+    if (navigator.canShare && navigator.canShare({ files })) {
+      try {
+        await navigator.share({
+          files,
+          title: `Entrada Mitre - ${beneficiary}`,
+          text: caption
+        });
+        showToast("✅ Entrada compartida con éxito.");
+        return;
+      } catch (err) {
+        if (err.name === 'AbortError') return; // User closed share sheet
+        // Fallback: try sharing file only without text
+        try {
+          await navigator.share({ files });
+          showToast("✅ Entrada compartida.");
+          return;
+        } catch (err2) {
+          if (err2.name === 'AbortError') return;
+        }
+      }
     }
 
+    // 2. Desktop fallback: Copy image to clipboard and trigger download
+    let copied = false;
     if (navigator.clipboard && window.ClipboardItem) {
       try {
         await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-        showToast("📋 ¡Imagen copiada! Abrí WhatsApp Web y presiona Ctrl+V para pegarla.");
-        window.open('https://web.whatsapp.com', '_blank');
-        return;
+        copied = true;
       } catch (e) {}
     }
 
@@ -528,11 +570,20 @@ async function shareSingleTicketWhatsApp(ticketId, beneficiary, typeLabel, dataU
     link.download = `Entrada-Mitre-${ticketId}.png`;
     link.href = dataUrl;
     link.click();
-    showToast("⬇️ Imagen descargada para adjuntar en WhatsApp.");
-  } catch (err) {
-    if (err.name !== 'AbortError') {
-      console.error(err);
+
+    if (copied) {
+      showToast("📋 ¡Foto copiada y descargada! Abrí WhatsApp y presiona Ctrl+V para pegarla.");
+    } else {
+      showToast("⬇️ Imagen descargada para adjuntar en WhatsApp.");
     }
+
+    setTimeout(() => {
+      window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(caption)}`, '_blank');
+    }, 400);
+
+  } catch (err) {
+    console.error("Error al compartir", err);
+    alert("Error al compartir: " + err.message);
   }
 }
 
@@ -660,12 +711,25 @@ async function openTicketModal(ticket) {
   document.getElementById('modalBtnDownload').download = `Entrada-Mitre-${ticket.id}.png`;
   document.getElementById('modalBtnLink').href = `/ticket/${ticket.id}`;
 
+  const typeLabel = ticket.type === 'abono' ? `Abono ${ticket.maxUses} Partidos` : (ticket.type === 'invitacion' ? 'Invitación Especial' : 'Entrada General');
+
   const btnShare = document.getElementById('modalBtnShareWhatsApp');
   const newBtn = btnShare.cloneNode(true);
   btnShare.parentNode.replaceChild(newBtn, btnShare);
   newBtn.addEventListener('click', () => {
-    shareSingleTicketWhatsApp(ticket.id, ticket.beneficiary, ticket.type === 'abono' ? `Abono ${ticket.maxUses} Partidos` : 'Invitación', dataUrl);
+    shareSingleTicketWhatsApp(ticket.id, ticket.beneficiary, typeLabel, dataUrl);
   });
+
+  const btnLinkWa = document.getElementById('modalBtnShareLinkWhatsApp');
+  if (btnLinkWa) {
+    const newBtnLinkWa = btnLinkWa.cloneNode(true);
+    btnLinkWa.parentNode.replaceChild(newBtnLinkWa, btnLinkWa);
+    newBtnLinkWa.addEventListener('click', () => {
+      const ticketUrl = `${window.location.origin}/ticket/${ticket.id}`;
+      const text = `🏀 *Club Bartolomé Mitre - Liga Argentina*\n🎟️ *${typeLabel}*\n👤 Para: *${ticket.beneficiary}*\n👉 *Pase digital con QR:* ${ticketUrl}`;
+      window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+    });
+  }
 }
 
 function closeTicketModal() {
