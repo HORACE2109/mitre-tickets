@@ -183,6 +183,10 @@
 
   </main>
 
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="/js/firebase-config.js"></script>
+  <script src="/js/db-service.js"></script>
   <script src="/js/html5-qrcode.min.js"></script>
   <script>
     // Audio Context Beeps
@@ -233,16 +237,15 @@
     let isTorchOn = false;
 
     async function init() {
-      const res = await fetch('/api/config');
-      const cfg = await res.json();
+      dbService.init();
+      await dbService.seedInitialData();
+      const cfg = await dbService.getConfig();
       const sel = document.getElementById('guardMatchSelect');
       sel.innerHTML = '';
       cfg.matches.forEach(m => {
         sel.add(new Option(`${m.name} (${m.date})`, m.id));
       });
       sel.value = cfg.activeMatchId;
-      doorCount = cfg.stats.usedToday || 0;
-      document.getElementById('doorCounter').textContent = doorCount;
     }
 
     async function toggleCamera() {
@@ -309,12 +312,7 @@
     async function validate(code) {
       const matchId = document.getElementById('guardMatchSelect').value;
       try {
-        const res = await fetch('/api/tickets/validate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code, matchId, gate: 'Control Móvil' })
-        });
-        const data = await res.json();
+        const data = await dbService.validateTicket(code, matchId, 'Control Móvil');
         showOverlayResult(data);
       } catch (e) {
         console.error(e);

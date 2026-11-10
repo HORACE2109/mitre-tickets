@@ -96,25 +96,28 @@
     </div>
   </div>
 
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="/js/firebase-config.js"></script>
+  <script src="/js/db-service.js"></script>
   <script src="/js/qrcode.min.js"></script>
   <script>
     const ticketId = window.location.pathname.split('/').pop();
     
     async function loadTicket() {
       try {
-        const [resTicket, resCfg] = await Promise.all([
-          fetch(`/api/tickets/${ticketId}`),
-          fetch('/api/config')
+        dbService.init();
+        const [ticket, cfg] = await Promise.all([
+          dbService.getTicket(ticketId),
+          dbService.getConfig()
         ]);
-        const data = await resTicket.json();
-        const cfg = await resCfg.json();
 
-        if (data.error) {
+        if (!ticket) {
           document.body.innerHTML = `<h2 style="color: #ef4444; text-align: center;">Entrada no encontrada</h2>`;
           return;
         }
 
-        const t = data.ticket;
+        const t = ticket;
         document.getElementById('ticketTitle').textContent = t.type === 'abono' ? `Abono ${t.maxUses} Partidos` : (t.type === 'invitacion' ? 'Invitación Especial' : 'Entrada General');
         document.getElementById('ticketBeneficiary').textContent = t.beneficiary;
         document.getElementById('ticketCode').textContent = `ID: ${t.id}`;
@@ -133,48 +136,70 @@
           document.getElementById('abonoUsesText').textContent = `${t.remainingUses} de ${t.maxUses} partidos disponibles`;
         }
 
-        // Direct high-contrast QR
+        // Direct QR using QRCode library directly
         const qrUrl = `${window.location.origin}/ticket/${t.id}`;
-        document.getElementById('directQrImg').src = `/api/qr-image?text=${encodeURIComponent(qrUrl)}&size=300&transparent=false`;
+        const qrContainer = document.createElement('div');
+        new QRCode(qrContainer, {
+          text: qrUrl,
+          width: 240,
+          height: 240,
+          colorDark: "#0a0f1d",
+          colorLight: "#ffffff",
+          correctLevel: QRCode.CorrectLevel.H
+        });
 
-        // Draw ticket on temporary canvas and show
-        const templateImg = new Image();
-        templateImg.crossOrigin = 'anonymous';
-        const currentTemplateName = cfg.currentTemplate || 'template_default.jpg';
-        templateImg.src = `/uploads/${currentTemplateName}?t=${Date.now()}`;
+        setTimeout(() => {
+          const qrCanvas = qrContainer.querySelector('canvas') || qrContainer.querySelector('img');
+          const qrDataUrl = qrCanvas.toDataURL ? qrCanvas.toDataURL('image/png') : qrCanvas.src;
+          document.getElementById('directQrImg').src = qrDataUrl;
 
-        templateImg.onload = () => {
-          const canvas = document.createElement('canvas');
-          const w = templateImg.naturalWidth || 768;
-          const h = templateImg.naturalHeight || 1024;
-          canvas.width = w;
-          canvas.height = h;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(templateImg, 0, 0);
+          // Draw ticket on temporary canvas and show
+          const templateImg = new Image();
+          templateImg.crossOrigin = 'anonymous';
+          templateImg.src = '/template_default.jpg';
 
-          let qrSize, qrX, qrY;
-          if (w >= 1000) {
-            qrSize = 215;
-            qrX = Math.round(w * 0.5 - qrSize / 2);
-            qrY = 1056;
-          } else {
-            qrSize = 150;
-            qrX = Math.round(w * 0.5 - qrSize / 2);
-            qrY = 765;
-          }
+          templateImg.onload = () => {
+            const canvas = document.createElement('canvas');
+            const w = templateImg.naturalWidth || 768;
+            const h = templateImg.naturalHeight || 1024;
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(templateImg, 0, 0);
 
-          // Fetch transparent QR image from API
-          const qrImg = new Image();
-          qrImg.crossOrigin = 'anonymous';
-          qrImg.src = `/api/qr-image?text=${encodeURIComponent(qrUrl)}&size=${qrSize * 2}&transparent=true`;
-          
-          qrImg.onload = () => {
-            ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
-            const dataUrl = canvas.toDataURL('image/png');
-            document.getElementById('ticketImg').src = dataUrl;
-            document.getElementById('btnDownloadImg').href = dataUrl;
+            let qrSize, qrX, qrY;
+            if (w >= 1000) {
+              qrSize = 215;
+              qrX = Math.round(w * 0.5 - qrSize / 2);
+              qrY = 1056;
+            } else {
+              qrSize = 150;
+              qrX = Math.round(w * 0.5 - qrSize / 2);
+              qrY = 765;
+            }
+
+            // Draw clean white rounded card
+            ctx.save();
+            ctx.fillStyle = '#ffffff';
+            if (ctx.roundRect) {
+              ctx.beginPath();
+              ctx.roundRect(qrX - 8, qrY - 8, qrSize + 16, qrSize + 16, 14);
+              ctx.fill();
+            } else {
+              ctx.fillRect(qrX - 8, qrY - 8, qrSize + 16, qrSize + 16);
+            }
+            ctx.restore();
+
+            const innerQr = new Image();
+            innerQr.src = qrDataUrl;
+            innerQr.onload = () => {
+              ctx.drawImage(innerQr, qrX, qrY, qrSize, qrSize);
+              const dataUrl = canvas.toDataURL('image/png');
+              document.getElementById('ticketImg').src = dataUrl;
+              document.getElementById('btnDownloadImg').href = dataUrl;
+            };
           };
-        };
+        }, 100);
       } catch (e) {
         console.error(e);
       }

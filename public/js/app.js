@@ -9,6 +9,7 @@ let lastAdminScanTime = 0;
 
 // Current batch of generated tickets in memory (with their dataURLs)
 let currentBatchTickets = [];
+let allLoadedTickets = [];
 
 // Audio Context for Beeps
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -39,13 +40,60 @@ function playSound(type) {
   } catch (e) {}
 }
 
+// Client-side QR generation helper (100% independent of server)
+function createClientQr(text, size = 300, transparent = false) {
+  return new Promise((resolve) => {
+    const tempDiv = document.createElement('div');
+    new QRCode(tempDiv, {
+      text: text,
+      width: size,
+      height: size,
+      colorDark: "#000000",
+      colorLight: transparent ? "#ffffff" : "#ffffff",
+      correctLevel: QRCode.CorrectLevel.H
+    });
+
+    setTimeout(() => {
+      const cvs = tempDiv.querySelector('canvas');
+      if (cvs) {
+        if (transparent) {
+          try {
+            const ctx2 = cvs.getContext('2d');
+            const imgData = ctx2.getImageData(0, 0, cvs.width, cvs.height);
+            const d = imgData.data;
+            for (let i = 0; i < d.length; i += 4) {
+              if (d[i] > 220 && d[i + 1] > 220 && d[i + 2] > 220) {
+                d[i + 3] = 0;
+              }
+            }
+            ctx2.putImageData(imgData, 0, 0);
+          } catch (e) {}
+        }
+        resolve(cvs.toDataURL('image/png'));
+      } else {
+        const img = tempDiv.querySelector('img');
+        resolve(img ? img.src : '');
+      }
+    }, 60);
+  });
+}
+
 // ==================== INIT ====================
 document.addEventListener('DOMContentLoaded', async () => {
+  dbService.init();
+  await dbService.seedInitialData();
+
   setupTabs();
   setupTypeRadios();
   setupSliders();
   await loadConfig();
-  await loadTickets();
+
+  // Real-time synchronization for tickets dashboard
+  dbService.subscribeTickets((tickets) => {
+    allLoadedTickets = tickets || [];
+    renderTicketsList(allLoadedTickets);
+    updateDashboardStats(allLoadedTickets);
+  });
 
   // Generator actions
   document.getElementById('btnGenerate').addEventListener('click', generateTickets);
@@ -146,32 +194,47 @@ function setupSliders() {
 // ==================== LOAD CONFIG & TEMPLATE ====================
 async function loadConfig() {
   try {
-    const res = await fetch('/api/config');
-    currentConfig = await res.json();
+    currentConfig = await dbService.getConfig();
 
     const selGen = document.getElementById('selectMatch');
     const selScan = document.getElementById('scannerMatchSelect');
     selGen.innerHTML = '';
     selScan.innerHTML = '';
 
-    currentConfig.matches.forEach(m => {
-      const opt1 = new Option(`${m.name} (${m.date})`, m.id);
-      const opt2 = new Option(`${m.name} (${m.date})`, m.id);
-      selGen.add(opt1);
-      selScan.add(opt2);
-    });
+    if (currentConfig.matches && currentConfig.matches.length > 0) {
+      currentConfig.matches.forEach(m => {
+        const opt1 = new Option(`${m.name} (${m.date})`, m.id);
+        const opt2 = new Option(`${m.name} (${m.date})`, m.id);
+        selGen.add(opt1);
+        selScan.add(opt2);
+      });
+      selScan.value = currentConfig.activeMatchId;
+    }
 
-    selScan.value = currentConfig.activeMatchId;
-    loadTemplateImage(currentConfig.currentTemplate || 'template_default.jpg');
+    const savedCustom = localStorage.getItem('mitre_custom_template');
+    if (savedCustom) {
+      document.getElementById('templateInfo').textContent = 'Usando: Plantilla Personalizada';
+      loadTemplateImage(savedCustom);
+    } else {
+      loadTemplateImage(currentConfig.currentTemplate || 'template_default.jpg');
+    }
   } catch (e) {
     console.error("Error loading config", e);
   }
 }
 
-function loadTemplateImage(filename) {
+function loadTemplateImage(source) {
   currentTemplateImg = new Image();
   currentTemplateImg.crossOrigin = 'anonymous';
-  currentTemplateImg.src = `/uploads/${filename}?t=${Date.now()}`;
+
+  if (source.startsWith('data:') || source.startsWith('blob:') || source.startsWith('http')) {
+    currentTemplateImg.src = source;
+  } else if (source.startsWith('/')) {
+    currentTemplateImg.src = source;
+  } else {
+    currentTemplateImg.src = `/${source}?t=${Date.now()}`;
+  }
+
   currentTemplateImg.onload = () => {
     const w = currentTemplateImg.naturalWidth || 768;
     const h = currentTemplateImg.naturalHeight || 1024;
@@ -212,7 +275,7 @@ function loadTemplateImage(filename) {
 }
 
 // ==================== CANVAS PREVIEW ====================
-function drawPreview(sampleCode = 'MITRE-INV-SAMPLE-01') {
+async function drawPreview(sampleCode = 'MITRE-INV-SAMPLE-01') {
   const canvas = document.getElementById('previewCanvas');
   const ctx = canvas.getContext('2d');
 
@@ -229,11 +292,11 @@ function drawPreview(sampleCode = 'MITRE-INV-SAMPLE-01') {
   const qrSize = parseInt(document.getElementById('sliderSize').value, 10);
   const isTransparent = document.getElementById('chkTransparent').checked;
 
-  const qrImg = new Image();
-  qrImg.crossOrigin = 'anonymous';
   const qrUrl = `${window.location.origin}/ticket/${sampleCode}`;
-  qrImg.src = `/api/qr-image?text=${encodeURIComponent(qrUrl)}&size=${qrSize * 2}&transparent=${isTransparent}`;
-  
+  const qrDataUrl = await createClientQr(qrUrl, qrSize * 2, isTransparent);
+
+  const qrImg = new Image();
+  qrImg.src = qrDataUrl;
   qrImg.onload = () => {
     if (!isTransparent) {
       ctx.save();
@@ -275,9 +338,10 @@ async function renderTicketCanvas(ticket) {
   const isTransparent = document.getElementById('chkTransparent').checked;
 
   const qrUrl = `${window.location.origin}/ticket/${ticket.id}`;
+  const qrDataUrl = await createClientQr(qrUrl, qrSize * 2, isTransparent);
+
   const qrImg = new Image();
-  qrImg.crossOrigin = 'anonymous';
-  qrImg.src = `/api/qr-image?text=${encodeURIComponent(qrUrl)}&size=${qrSize * 2}&transparent=${isTransparent}`;
+  qrImg.src = qrDataUrl;
 
   await new Promise((resolve) => {
     qrImg.onload = () => {
@@ -312,24 +376,17 @@ async function generateTickets() {
 
   const btn = document.getElementById('btnGenerate');
   btn.disabled = true;
-  btn.textContent = '⏳ Generando...';
+  btn.textContent = '⏳ Generando en la nube...';
 
   try {
-    const res = await fetch('/api/tickets/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type, beneficiary, count, matchCount, matchId })
-    });
-
-    const data = await res.json();
-    if (data.success && data.tickets) {
-      await renderBatchGallery(data.tickets, beneficiary || 'Lote');
-      showToast(`¡Se generaron ${data.tickets.length} entradas con éxito!`);
-      loadTickets();
+    const createdTickets = await dbService.generateTickets({ type, beneficiary, count, matchCount, matchId });
+    if (createdTickets && createdTickets.length > 0) {
+      await renderBatchGallery(createdTickets, beneficiary || 'Lote');
+      showToast(`¡Se generaron ${createdTickets.length} entradas en la nube con éxito!`);
     }
   } catch (e) {
     console.error("Error generating tickets", e);
-    alert("Error al generar las entradas.");
+    alert("Error al generar las entradas: " + e.message);
   } finally {
     btn.disabled = false;
     btn.textContent = '⚡ Generar Entradas y Estampar QR';
@@ -405,7 +462,6 @@ async function shareBatchWhatsApp() {
       files.push(new File([blob], `Entrada-Mitre-${t.id}.png`, { type: 'image/png' }));
     }
 
-    // Try multi-file native share (Android / iOS attaches ALL images at once into WhatsApp!)
     if (navigator.canShare && navigator.canShare({ files })) {
       await navigator.share({
         files,
@@ -415,7 +471,6 @@ async function shareBatchWhatsApp() {
       return;
     }
 
-    // Fallback if desktop or multi-file not supported
     alert("En navegadores de escritorio no es posible enviar múltiples archivos juntos a la vez. Descargá el archivo .ZIP con el botón de al lado para compartir todas las fotos.");
   } catch (err) {
     if (err.name !== 'AbortError') {
@@ -453,14 +508,13 @@ async function shareSingleTicketWhatsApp(ticketId, beneficiary, typeLabel, dataU
 
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       await navigator.share({
-        files: [file],
+        files,
         title: `Entrada Mitre - ${beneficiary}`,
         text: caption
       });
       return;
     }
 
-    // Desktop PC: Copy image to clipboard
     if (navigator.clipboard && window.ClipboardItem) {
       try {
         await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
@@ -470,7 +524,6 @@ async function shareSingleTicketWhatsApp(ticketId, beneficiary, typeLabel, dataU
       } catch (e) {}
     }
 
-    // Download fallback
     const link = document.createElement('a');
     link.download = `Entrada-Mitre-${ticketId}.png`;
     link.href = dataUrl;
@@ -484,13 +537,12 @@ async function shareSingleTicketWhatsApp(ticketId, beneficiary, typeLabel, dataU
 }
 
 // ==================== DASHBOARD / TICKETS LIST ====================
-let allLoadedTickets = [];
-
 async function loadTickets() {
   try {
-    const res = await fetch('/api/tickets');
-    const data = await res.json();
-    allLoadedTickets = data.tickets || [];
+    if (!dbService.db) return;
+    const snap = await dbService.db.collection('tickets').orderBy('createdAt', 'desc').get();
+    allLoadedTickets = [];
+    snap.forEach(doc => allLoadedTickets.push(doc.data()));
     renderTicketsList(allLoadedTickets);
     updateDashboardStats(allLoadedTickets);
   } catch (e) {
@@ -557,18 +609,18 @@ function renderTicketsList(tickets) {
         <button class="btn btn-secondary btn-view-ticket" style="padding: 0.4rem 0.65rem; font-size: 0.8rem;" title="Ver y Enviar">
           👁️ Ver / Enviar
         </button>
-        <button class="btn btn-secondary" style="padding: 0.4rem 0.6rem; font-size: 0.8rem;" onclick="resetSingleTicket('${t.id}')" title="Resetear">
+        <button class="btn btn-secondary btn-reset-ticket" style="padding: 0.4rem 0.6rem; font-size: 0.8rem;" title="Resetear">
           ↺
         </button>
-        <button class="btn btn-danger" style="padding: 0.4rem 0.6rem; font-size: 0.8rem;" onclick="deleteTicket('${t.id}')" title="Eliminar">
+        <button class="btn btn-danger btn-del-ticket" style="padding: 0.4rem 0.6rem; font-size: 0.8rem;" title="Eliminar">
           🗑️
         </button>
       </div>
     `;
 
-    card.querySelector('.btn-view-ticket').addEventListener('click', () => {
-      openTicketModal(t);
-    });
+    card.querySelector('.btn-view-ticket').addEventListener('click', () => openTicketModal(t));
+    card.querySelector('.btn-reset-ticket').addEventListener('click', () => resetSingleTicket(t.id));
+    card.querySelector('.btn-del-ticket').addEventListener('click', () => deleteTicket(t.id));
 
     container.appendChild(card);
   });
@@ -609,7 +661,6 @@ async function openTicketModal(ticket) {
   document.getElementById('modalBtnLink').href = `/ticket/${ticket.id}`;
 
   const btnShare = document.getElementById('modalBtnShareWhatsApp');
-  // Reattach listener cleanly
   const newBtn = btnShare.cloneNode(true);
   btnShare.parentNode.replaceChild(newBtn, btnShare);
   newBtn.addEventListener('click', () => {
@@ -624,9 +675,8 @@ function closeTicketModal() {
 // ==================== RESET & DELETE ====================
 async function resetSingleTicket(id) {
   try {
-    await fetch(`/api/tickets/reset/${id}`, { method: 'POST' });
+    await dbService.resetTicket(id);
     showToast(`Entrada ${id} restablecida a activa.`);
-    loadTickets();
   } catch (e) {
     console.error(e);
   }
@@ -635,9 +685,8 @@ async function resetSingleTicket(id) {
 async function resetAllTickets() {
   if (!confirm("¿Reiniciar todas las entradas a 'Sin Usar' para seguir haciendo pruebas?")) return;
   try {
-    await fetch('/api/tickets/reset-all', { method: 'POST' });
+    await dbService.resetAllTickets();
     showToast("Todas las entradas fueron restablecidas a activas.");
-    loadTickets();
   } catch (e) {
     console.error(e);
   }
@@ -646,8 +695,8 @@ async function resetAllTickets() {
 async function deleteTicket(id) {
   if (!confirm(`¿Eliminar la entrada ${id}?`)) return;
   try {
-    await fetch(`/api/tickets/${id}`, { method: 'DELETE' });
-    loadTickets();
+    await dbService.deleteTicket(id);
+    showToast(`Entrada ${id} eliminada.`);
   } catch (e) {
     console.error(e);
   }
@@ -721,14 +770,8 @@ async function handleScanFile(e) {
 async function validateCode(rawCode) {
   const matchId = document.getElementById('scannerMatchSelect').value;
   try {
-    const res = await fetch('/api/tickets/validate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: rawCode, matchId, gate: 'Admin' })
-    });
-    const result = await res.json();
+    const result = await dbService.validateTicket(rawCode, matchId, 'Admin');
     displayScanResult(result);
-    loadTickets();
   } catch (e) {
     console.error(e);
   }
@@ -768,31 +811,29 @@ function displayScanResult(res) {
 async function uploadCustomTemplate(e) {
   const file = e.target.files[0];
   if (!file) return;
-  const formData = new FormData();
-  formData.append('template', file);
 
-  try {
-    const res = await fetch('/api/upload-template', { method: 'POST', body: formData });
-    const data = await res.json();
-    if (data.success) {
-      document.getElementById('templateInfo').textContent = `Usando: ${data.filename}`;
-      loadTemplateImage(data.filename);
-      showToast("Nueva plantilla subida con éxito.");
+  const reader = new FileReader();
+  reader.onload = async (evt) => {
+    const dataUrl = evt.target.result;
+    try {
+      localStorage.setItem('mitre_custom_template', dataUrl);
+      document.getElementById('templateInfo').textContent = `Usando: Plantilla Personalizada (${file.name})`;
+      loadTemplateImage(dataUrl);
+      showToast("Nueva plantilla cargada con éxito.");
+    } catch (storageErr) {
+      document.getElementById('templateInfo').textContent = `Usando: Plantilla Personalizada (${file.name})`;
+      loadTemplateImage(dataUrl);
+      showToast("Plantilla cargada en memoria.");
     }
-  } catch (err) {
-    alert("Error al subir la imagen");
-  }
+  };
+  reader.readAsDataURL(file);
 }
 
 async function restoreDefaultTemplate() {
-  try {
-    await fetch('/api/template/restore-default', { method: 'POST' });
-    document.getElementById('templateInfo').textContent = 'Usando: template_default.jpg';
-    loadTemplateImage('template_default.jpg');
-    showToast("Plantilla oficial restaurada.");
-  } catch (err) {
-    console.error(err);
-  }
+  localStorage.removeItem('mitre_custom_template');
+  document.getElementById('templateInfo').textContent = 'Usando: template_default.jpg';
+  loadTemplateImage('template_default.jpg');
+  showToast("Plantilla oficial restaurada.");
 }
 
 // ==================== TOAST ====================
